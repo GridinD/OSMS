@@ -1,87 +1,138 @@
-% Входные данные
-transmitter_power_BS = 46; % Мощность передатчика BS в децибелах милливатт (dBm)
-sectors = 3; % Число секторов на одной BS
-transmitter_power_UE = 24; % Мощность передатчика пользовательского терминала UE в dBm
-antenna_BS = 21; % Коэффициент усиления антенны BS в децибелах изотропного излучателя (dBi)
-wall = 15; % Запас мощности сигнала на проникновения сквозь стены (dB)
-interference = 1; % Запас мощности сигнала на интерференцию (dB)
-frequency_range = 1.8; % Диапазон частот (Гигагерцы)
-UL_bandwidth = 10; % Полоса частот в uplink (Мегагерцы)
-DL_bandwidth = 20; % Полоса частот в downlink (Мегагерцы)
-noise_BS = 2.4; % Коэффициент шума приемника BS (dB)
-noise_UE = 6; % Коэффициент шума приемника пользователя (dB)
-SINR_DL = 2; % Требуемое отношение сигнал-шум-интерференция (SINR) для downlink (dB)
-SINR_UL = 4; % Требуемое отношение SINR для uplink (dB)
-MIMO = 2; % Число приемо-передающих антенн на BS (MIMO)
-area = 100; % Площадь территории (квадратные километры)
-area_centers = 4; % Площадь торговых и бизнес центров (квадратные метры)
+heightBS = 60; %%Высота антенны
+hBuild = 30; %%Высота зданий
+freq = 1.8; %%Диапазон частот
+TxPowerBS = 46; %%Мощность передатчика базовой станции dBm
+TxPowerUE = 24; %%Мощность передатчика пользователского терминала dBm
+AntGainBS = 21; %%Коеффициент усиления антенны BS в децибелах изотропного излучателя dB
+fi = 35; %%Угол наклона
+IM = 6; %%Интерференция 
+NoiseFigure1 = 2.4; %%Коэффициент шума приемника BS dBm
+NoiseFigure2 = 6; %%Коэффициент шума приемника пользователя dB
+SINR_DL = 2; %%Требуемое отношение сигнал-интерференция для downlink dB
+SINR_UL = 4; %%uplink dB
+MIMOGain = 2; %%Число антенн БС
+PenetrWall = 15; %%Коэффициет проникновения
 
-% Расчет бюджета восходящего канала
-transmitter_power_BS_budget = 10^((transmitter_power_BS - 30) / 10);
-transmitter_power_UE_budget = 10^((transmitter_power_UE - 30) / 10);
 
-% Расчет диапазона радиосвязи
-wavelength = 3e8 / (frequency_range * 1e9);
-radius = sqrt(area * 1e6 / pi);
+ThermalNoise1 = -174 + 10 * log10(20000000);
+ThermalNoise2 = -174 + 10 * log10(10000000);
+fprintf('Шум приемника BS %2f\n', ThermalNoise1);
+fprintf('Шум примника пользователя %2f\n', ThermalNoise2);
 
-% Расчет свободной пространственной потери
-loss = 20 * log10(4 * pi * radius / wavelength);
+RxSensUE = NoiseFigure1 + ThermalNoise1 + SINR_DL;
+RxSensBS = NoiseFigure2 + ThermalNoise2 + SINR_UL;
+fprintf('RxSensUE %2f\n', RxSensUE);
+fprintf('RxSensBS %2f\n', RxSensBS);
 
-% Расчет общей потери на уровне мощности
-total_loss = (loss + transmitter_power_UE_budget + antenna_BS - transmitter_power_BS_budget - wall - interference - noise_UE - noise_BS);
+MAPL_DL = TxPowerBS + AntGainBS + MIMOGain - IM - PenetrWall - RxSensUE;
+MAPL_UL = TxPowerUE + AntGainBS + MIMOGain - IM - PenetrWall - RxSensBS;
+fprintf('MAPL_DL %2f\n', MAPL_DL);
+fprintf('MAPL_UL %2f\n', MAPL_UL);
 
-% Расстояния между приемником и передатчиком (от 1 до 1000 метров)
-distances = 1:1000;
+arr = zeros(1, 3000);
+arr2 = zeros(1, 3000);
+arr3 = zeros(1, 3000);
+arr4 = zeros(1, 3000);
 
-% Расчет бюджета и входных потерь для разных моделей
-input_losses = zeros(1, length(distances));
-
-for distance = distances
-    % Расчет свободной пространственной потери
-    loss = 20 * log10(4 * pi * distance / wavelength);
-    
-    % Расчет общей потери на уровне мощности для COST 231 Hata
-    total_loss_COST231 = (loss + transmitter_power_UE_budget + antenna_BS - transmitter_power_BS_budget - wall - interference - noise_UE - noise_BS);
-    
-    input_losses(distance) = total_loss_COST231;
+% Model1
+key1 = true;
+for i = 1:3000
+    path_long = i;
+    PL = 26 * log10(freq) + 22.7 + 36.7 * log10(path_long);
+    arr(i) = PL;
+    if PL > MAPL_UL && key1
+        R1 = i - 1;
+        key1 = false;
+        fprintf('Модель UMiNLOS: R1 = %d\n', R1);
+    end
 end
+AreaBS = 1.95 * R1 * R1;
+fprintf('Площадь базовой станции модель UMiNLOS %f\n', AreaBS);
+Area1 = 100000000 / AreaBS;
+fprintf('Количество станций на 100кв.км:%.0f\n', Area1);
+ShopCenter = 4000000 / AreaBS;
+fprintf('Количество станций необходимых для покрытия микро и фемтосот: %.0f\n',ShopCenter);
 
-% Расчет максимально допустимых потерь сигнала (MAPL_UL)
-MAPL_UL = transmitter_power_UE + SINR_DL - SINR_UL - total_loss;
-MAPL_DL = transmitter_power_BS + SINR_UL - SINR_DL - total_loss;
 
-fprintf('Максимально допустимые потери сигнала для MAPL_UL: %f\n', MAPL_UL);
-fprintf('Максимально допустимые потери сигнала для MAPL_DL: %f\n', MAPL_DL);
+% Model2
+key = true;
+for i = 1:3000
+    path_long = i;
+    a = 3.2 * (log10(11.75 * 4) ^ 2) - 4.97;
+    LClutter = -(2 * (log10(1800 / 28) ^ 2) + 5.4);
+    s = 44.9 - 6.55 * log10(1800);
+    PL = 46.3 + 33.9 * log10(1800) - 13.82 * log10(150) - a + s * log10(i / 1000) + 3;
+    arr2(i) = PL;
+    if PL > MAPL_UL && key
+        R = i - 1;
+        key = false;
+        fprintf('Модель COST231: R = %d\n', R);
+    end
+end
+AreaBS1 = 1.95 * R * R;
+fprintf('Площадь базовой станции модель COST231 %f\n', AreaBS1);
+Area2 = (100000000 / AreaBS1);
+fprintf('Количество станций на 100кв.км:%.0f\n', Area2);
+ShopCenter1 = 4000000 / AreaBS1;
+fprintf('Количество станций необходимых для покрытия микро и фемтосот: %.0f\n',ShopCenter1);
 
-% Построение графиков
-figure;
-plot(distances, input_losses, 'b-', 'LineWidth', 2);
-xlabel('Расстояние между приемником и передатчиком (метры)');
-ylabel('Входные потери радиосигнала (дБ)');
-title('Зависимость входных потерь радиосигнала от расстояния');
+% Model3
+for i = 1:3000
+    path_long = i;
+    PL = 42.6 + 20 * log10(1.9) + 26 * log10(i);
+    arr3(i) = PL;
+end
+%fprintf('Модель Walfish-Ikegami Llos\n');
+
+% Model4
+for i = 1:3000
+    path_long = i;
+    L0 = 32.44 + 20 * log10(1.9) + 20 * log10(i);
+    if fi < 35 && fi > 0
+        qoef = -10 + 0.354 * fi;
+    elseif fi < 55 && fi >= 35
+        qoef = 2.5 + 0.075 * fi;
+    elseif fi < 90 && fi >= 55
+        qoef = 4.0 - 0.114 * fi;
+    end
+    L2 = -16.9 - 10 * log10(20) + 10 * log10(1.9) + 20 * log10(hBuild - 3) + qoef;
+    if heightBS > hBuild
+        L1_1 = -18 * log10(1 + heightBS - hBuild);
+        kD = 18;
+    elseif heightBS <= hBuild
+        L1_1 = 0;
+        kD = 18 - 15 * ((heightBS - hBuild) / hBuild);
+    end
+    if heightBS <= hBuild && path_long > 500
+        kA = 54 - 0.8 * (heightBS - hBuild);
+    elseif heightBS <= hBuild && path_long <= 500
+        kA = 54 - 0.8 * (heightBS - hBuild) * path_long / 0.5;
+    elseif heightBS > hBuild
+        kA = 54;
+        kF = -4 + 0.7 * (1.9 / 925 - 1);
+    end
+    L1 = L1_1 + kA + kD * log10(path_long) + kF * log10(1.9) - 9 * log10(20);
+    if L1 + L2 > 0
+        Llnos = L0 + L1 + L2;
+    elseif L1 + L2 <= 0
+        Llnos = L0;
+    end
+    arr4(i) = Llnos;
+end
+%fprintf('Модель Walfish-Ikegami Lnlos\n');
+
+q1_1 = 10000000 / (1.95 * (R ^ 2));
+q1_2 = 4000000 / (1.95 * (R1 ^ 2));
+
+figure('Position', [100, 100, 800, 600]);
+hold on;
 grid on;
-legend('COST 231 Hata');
+plot(arr, 'b', 'LineWidth', 2);
+plot(arr2, 'g--', 'LineWidth', 2);
+plot(arr3, 'r-.', 'LineWidth', 2);
+plot(arr4, 'm:', 'LineWidth', 2);
 
-% Расчет площади одной базовой станции (UL)
-wavelength_UL = 3e8 / (frequency_range * 1e9); % Длина волны в метрах (UL)
-min_radius_BS_UL = sqrt((area_centers * 1e6) / (pi * sectors));
-area_BS_sqm_UL = pi * min_radius_BS_UL^2;
-
-% Расчет площади одной базовой станции (DL)
-wavelength_DL = 3e8 / (frequency_range * 1e9); % Длина волны в метрах (DL)
-min_radius_BS_DL = sqrt((area_centers * 1e6) / (pi * sectors));
-area_BS_sqm_DL = pi * min_radius_BS_DL^2;
-
-% Определение минимальной площади
-min_area_BS = min(area_BS_sqm_UL, area_BS_sqm_DL);
-
-% Расчет необходимого количества базовых станций (сайтов) для покрытия всей территории
-required_number_of_BS = ceil(area * 1e6 / min_area_BS);
-
-fprintf('Радиус базовой станции в восходящем канале на UL: %f\n', min_radius_BS_UL);
-fprintf('Радиус базовой станции в нисходящем канале на DL: %f\n', min_radius_BS_DL);
-fprintf('Минимальный радиус базовой станции: %f\n', min(min_radius_BS_UL, min_radius_BS_DL));
-fprintf('Площадь одной базовой станции на UL: %f\n', area_BS_sqm_UL);
-fprintf('Площадь одной базовой станции на DL: %f\n', area_BS_sqm_DL);
-fprintf('Минимальная площадь одной базовой станции: %f\n', min_area_BS);
-fprintf('Необходимое количество базовых станций: %d\n', required_number_of_BS);
+xlabel('Path Length');
+ylabel('Path Loss (dB)');
+legend('UMiNLOS', 'COST231', 'Walfish-Ikegami Llos', 'Walfish-Ikegami Lnlos');
+title('Path Loss Models');
